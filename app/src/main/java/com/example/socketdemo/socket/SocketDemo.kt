@@ -36,6 +36,7 @@ object SocketDemo {
         mSocket.on(Constants.EVENT_ON_CONNECTION_SUCCEED, onConnectionSucceed)
         mSocket.on(Constants.EVENT_LOCATION_RECEIVER, onLocationReceiver)
         mSocket.on(Constants.EVENT_MESSAGE, onMessageReceived)
+        mSocket.on(Constants.EVENT_REMOVE_MARKER, onRemoveMarker)
         connect()
     }
 
@@ -49,6 +50,10 @@ object SocketDemo {
 
     fun disconnect(){
         mSocket.disconnect()
+    }
+
+    fun removeOtherUserMarker(socketId: String){
+        mSocket.emit(Constants.EVENT_REMOVE_MARKER,socketId)
     }
 
     fun getSocketId(): String{
@@ -129,6 +134,15 @@ object SocketDemo {
             bearing = data.getString("bearing")
             addUser.onLocationReceived(LatLng(lat.toDouble(),lng.toDouble()),socketId,bearing.toFloat())
             Log.d(TAG,"lat: $lat lng: $lng")
+        } catch (e: JSONException) {
+            Log.e(TAG, e.message!!)
+        }
+    }
+
+    private val onRemoveMarker = Emitter.Listener { args ->
+        Log.e(TAG,"onRemoveMarker")
+        try {
+            addUser.removeMarker()
         } catch (e: JSONException) {
             Log.e(TAG, e.message!!)
         }

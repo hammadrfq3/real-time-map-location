@@ -9,4 +9,6 @@ interface AddUser {
 
     fun onLocationReceived(latLng: LatLng,socketId: String,bearing: Float)
 
+    fun removeMarker()
+
 }

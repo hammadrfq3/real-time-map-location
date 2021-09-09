@@ -32,6 +32,8 @@ class Constants {
 
         val EVENT_CONNECTION_REQUEST = "connectionRequest"
 
+        val EVENT_REMOVE_MARKER = "remove_marker"
+
         val EVENT_LOCATION_RECEIVER = "onLocationReceiver"
 
         val SOCKET_URL = "http://192.168.100.147:3000"

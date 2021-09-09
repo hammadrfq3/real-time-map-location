@@ -207,6 +207,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
         })
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        //otherUserSocketId?.let { SocketDemo.removeOtherUserMarker(it) }
+        SocketDemo.disconnect()
+    }
+
     protected fun createMarker(
         latitude: Double,
         longitude: Double
@@ -234,5 +240,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
             updateUersLocation(latLng.latitude,latLng.longitude, bearing, otherUSerMarker!!)
         }
 
+    }
+
+    override fun removeMarker() {
+        runOnUiThread {
+            otherUSerMarker?.remove()
+        }
     }
 }
