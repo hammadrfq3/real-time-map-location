@@ -31,7 +31,7 @@ class MyLocationListener : LocationListener {
 
             myCallBack = callback
             locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager?
-            locationManager!!.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0.5f, this)
+            locationManager!!.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, this)
 
         }
     }

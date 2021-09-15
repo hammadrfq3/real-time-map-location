@@ -1,6 +1,5 @@
 package com.example.socketdemo
 
-import android.location.Location
 import com.google.android.gms.maps.model.LatLng
 
 interface AddUser {

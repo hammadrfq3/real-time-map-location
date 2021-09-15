@@ -7,7 +7,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Point
-import android.location.Location
 import android.os.Bundle
 import android.os.Handler
 import android.os.SystemClock
@@ -25,14 +24,28 @@ import com.google.android.gms.maps.model.*
 import org.json.JSONObject
 
 import com.google.gson.Gson
-import com.google.android.gms.maps.model.CameraPosition
 
 import com.google.android.gms.maps.CameraUpdateFactory
 
 import com.google.android.gms.maps.model.PolylineOptions
+import com.google.android.gms.maps.model.LatLng
 
+import android.view.animation.AccelerateDecelerateInterpolator
 
+import com.google.android.gms.maps.model.Marker
+import com.google.maps.DirectionsApiRequest
+import com.google.maps.GeoApiContext
+import com.google.maps.PendingResult
+import com.google.maps.model.DirectionsResult
+import android.R
 
+import com.google.android.gms.maps.model.Polyline
+
+import com.google.maps.internal.PolylineEncoding
+
+import com.google.maps.model.DirectionsRoute
+
+import android.os.Looper
 
 
 
@@ -51,6 +64,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
     private lateinit var polylineOptions: PolylineOptions
     private var otherUserSocketId: String? = null
     private var otherUSerMarker: Marker? = null
+    private var mGeoApiContext: GeoApiContext? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,7 +75,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
         SocketDemo.setListener(this)
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.map) as SupportMapFragment
+            .findFragmentById(com.example.socketdemo.R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
 
         mLocationListener = MyLocationListener()
@@ -85,10 +99,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
 
     fun updateUersLocation(lat: Double,lng: Double,bearing: Float,mMarker: Marker){
         val currentLocation = LatLng(lat, lng)
-        //marker.position = sydney
-        mMarker.rotation = bearing
-        //polylineOptions.add(currentLocation)
-        animateMarker(mMarker,currentLocation,false)
+        animateMarker(mMarker,currentLocation,false,bearing)
     }
 
     /**
@@ -103,21 +114,25 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
+        if (mGeoApiContext == null) {
+            mGeoApiContext = GeoApiContext.Builder()
+                .apiKey(getString(com.example.socketdemo.R.string.google_maps_api_key))
+                .build()
+        }
+
         // Add a marker in Sydney and move the camera
         val sydney = LatLng(31.4844536, 74.3928821)
         val userData = UserData(SocketDemo.getSocketId(),"Robot ${SocketDemo.getSocketId()}",31.4844536,74.3928821)
         SocketDemo.sendConnectionRequest(convertObjToJsonObj(userData))
         marker = mMap.addMarker(MarkerOptions().position(sydney).title("Marker in Sydney"))
-        marker.setIcon(bitmapDescriptorFromVector(this,R.drawable.ic_car))
+        marker.setIcon(bitmapDescriptorFromVector(this,com.example.socketdemo.R.drawable.ic_car))
         marker.isFlat = true
         myLocation()
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(sydney,17f))
         mMap.setOnMapClickListener {
             if(destinationLatLng ==null){
                 destinationLatLng = it
-                polylineOptions = PolylineOptions()
-                    .color(Color.parseColor("#FFB700"))
-                    .width(15f) // Point A.
+                calculateDirections()
             }
         }
     }
@@ -174,7 +189,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
 
     fun animateMarker(
         marker: Marker, toPosition: LatLng,
-        hideMarker: Boolean
+        hideMarker: Boolean,
+        bearing: Float
     ) {
         val handler = Handler()
         val start = SystemClock.uptimeMillis()
@@ -193,6 +209,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
                 val lng = t * toPosition.longitude + (1 - t) * startLatLng.longitude
                 val lat = t * toPosition.latitude + (1 - t) * startLatLng.latitude
                 marker.position = LatLng(lat, lng)
+                marker.rotation = bearing
                 if (t < 1.0) {
                     // Post again 16ms later.
                     handler.postDelayed(this, 16)
@@ -221,7 +238,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
             MarkerOptions()
                 .position(LatLng(latitude, longitude))
                 .anchor(0.5f, 0.5f)
-                .icon(bitmapDescriptorFromVector(this,R.drawable.ic_car))
+                .icon(bitmapDescriptorFromVector(this,com.example.socketdemo.R.drawable.ic_car))
         )
     }
 
@@ -232,6 +249,80 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
         }
         otherUserSocketId = socketId
 
+    }
+
+    private fun calculateDirections() {
+        Log.d(
+            TAG,
+            "calculateDirections: calculating directions."
+        )
+        val destination = com.google.maps.model.LatLng(
+            destinationLatLng!!.latitude,
+            destinationLatLng!!.longitude
+        )
+        val directions = DirectionsApiRequest(mGeoApiContext)
+        directions.alternatives(true)
+        directions.origin(
+            com.google.maps.model.LatLng(
+                marker.position.latitude,
+                marker.position.longitude
+            )
+        )
+        Log.d(
+            TAG,
+            "calculateDirections: destination: $destination"
+        )
+        directions.destination(destination)
+            .setCallback(object : PendingResult.Callback<DirectionsResult> {
+                override fun onResult(result: DirectionsResult) {
+                    Log.d(
+                        TAG,
+                        "onResult: routes: " + result.routes[0].toString()
+                    )
+                    Log.d(
+                        TAG,
+                        "onResult: geocodedWayPoints: " + result.geocodedWaypoints[0].toString()
+                    )
+                    addPolylinesToMap(result);
+                }
+
+                override fun onFailure(e: Throwable) {
+                    Log.e(
+                        TAG,
+                        "onFailure: " + e.message
+                    )
+                }
+            })
+    }
+
+    private fun addPolylinesToMap(result: DirectionsResult) {
+        Handler(Looper.getMainLooper()).post {
+            Log.d(TAG, "run: result routes: " + result.routes.size)
+            for (route in result.routes) {
+                Log.d(TAG, "run: leg: " + route.legs[0].toString())
+                Log.d(TAG, "run: fare: " +   route.fare.value.toString())
+                val decodedPath = PolylineEncoding.decode(route.overviewPolyline.encodedPath)
+                val newDecodedPath: MutableList<LatLng> =
+                    ArrayList()
+
+                // This loops through all the LatLng coordinates of ONE polyline.
+                for (latLng in decodedPath) {
+
+//                        Log.d(TAG, "run: latlng: " + latLng.toString());
+                    newDecodedPath.add(
+                        LatLng(
+                            latLng.lat,
+                            latLng.lng
+                        )
+                    )
+                }
+                val polyline: Polyline =
+                    mMap.addPolyline(PolylineOptions().addAll(newDecodedPath))
+                polyline.color = ContextCompat.getColor(this, com.example.socketdemo.R.color.direction)
+                polyline.isClickable = true
+                polyline.width = 20f
+            }
+        }
     }
 
     override fun onLocationReceived(latLng: LatLng, socketId: String,bearing: Float) {

@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">SocketDemo</string>
     <string name="title_activity_maps">MapsActivity</string>
+    <string name="google_maps_api_key">AIzaSyD_zXuq_WmqSmKGHFo4toSRsySZQzbEmt4</string>
 </resources>
