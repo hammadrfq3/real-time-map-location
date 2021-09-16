@@ -242,6 +242,21 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
         )
     }
 
+    protected fun createMarkerGeneral(
+        latitude: Double,
+        longitude: Double,
+        title: String,
+        snippet: String
+    ) {
+        mMap.addMarker(
+            MarkerOptions()
+                .position(LatLng(latitude, longitude))
+                .title(title)
+                .icon(bitmapDescriptorFromVector(this,com.example.socketdemo.R.drawable.ic_minutes))
+                .anchor(0.5f, 0.5f)
+        ).showInfoWindow()
+    }
+
     override fun addUser(username: String, socketId: String,latLng: LatLng) {
 
         runOnUiThread {
@@ -300,7 +315,17 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
             Log.d(TAG, "run: result routes: " + result.routes.size)
             for (route in result.routes) {
                 Log.d(TAG, "run: leg: " + route.legs[0].toString())
-                Log.d(TAG, "run: fare: " +   route.fare.value.toString())
+                Log.d(TAG, "run: distance: " + route.legs[0].distance)
+                Log.d(TAG, "run: duration: " + route.legs[0].duration)
+
+                var totalDist = route.legs[0].distance.inMeters / 1000
+
+                val tempLatLng = midPoint(route.legs[0].startLocation.lat,
+                    route.legs[0].startLocation.lng,
+                    route.legs[0].endLocation.lat,
+                    route.legs[0].endLocation.lng)
+              /*  createMarker(tempLatLng.latitude,
+                    tempLatLng.longitude)*/
                 val decodedPath = PolylineEncoding.decode(route.overviewPolyline.encodedPath)
                 val newDecodedPath: MutableList<LatLng> =
                     ArrayList()
@@ -320,9 +345,39 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
                     mMap.addPolyline(PolylineOptions().addAll(newDecodedPath))
                 polyline.color = ContextCompat.getColor(this, com.example.socketdemo.R.color.direction)
                 polyline.isClickable = true
-                polyline.width = 20f
+                polyline.width = 15f
+
+                val midPoint = polyline.points.size / 2
+                val gg = polyline.points.get(midPoint)
+                createMarkerGeneral(gg.latitude,
+                    gg.longitude,
+                    route.legs[0].duration.toString(),
+                    "")
             }
         }
+    }
+
+    fun midPoint(lat1: Double, lon1: Double, lat2: Double, lon2: Double) : LatLng {
+        var lat1 = lat1
+        var lon1 = lon1
+        var lat2 = lat2
+        val dLon = Math.toRadians(lon2 - lon1)
+
+        //convert to radians
+        lat1 = Math.toRadians(lat1)
+        lat2 = Math.toRadians(lat2)
+        lon1 = Math.toRadians(lon1)
+        val Bx = Math.cos(lat2) * Math.cos(dLon)
+        val By = Math.cos(lat2) * Math.sin(dLon)
+        val lat3 = Math.atan2(
+            Math.sin(lat1) + Math.sin(lat2),
+            Math.sqrt((Math.cos(lat1) + Bx) * (Math.cos(lat1) + Bx) + By * By)
+        )
+        val lon3 = lon1 + Math.atan2(By, Math.cos(lat1) + Bx)
+
+        //print out in degrees
+        println(Math.toDegrees(lat3).toString() + " " + Math.toDegrees(lon3))
+        return LatLng(lat3,lon3)
     }
 
     override fun onLocationReceived(latLng: LatLng, socketId: String,bearing: Float) {
