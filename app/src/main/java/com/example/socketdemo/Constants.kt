@@ -3,6 +3,7 @@ package com.example.socketdemo
 class Constants {
 
     companion object{
+        val DEFAULT_ZOOM = 15f
         /**
          * Called on a connection.
          */
@@ -36,7 +37,7 @@ class Constants {
 
         val EVENT_LOCATION_RECEIVER = "onLocationReceiver"
 
-        val SOCKET_URL = "http://192.168.100.147:3000"
+        val SOCKET_URL = "http://192.168.100.67:3000"
     }
 
 }

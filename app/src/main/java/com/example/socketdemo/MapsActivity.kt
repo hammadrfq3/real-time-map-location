@@ -5,10 +5,10 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Point
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.view.animation.Interpolator
@@ -17,39 +17,24 @@ import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.example.socketdemo.Constants.Companion.DEFAULT_ZOOM
 import com.example.socketdemo.databinding.ActivityMapsBinding
 import com.example.socketdemo.socket.SocketDemo
+import com.example.socketdemo.utils.AnimationUtils
+import com.example.socketdemo.utils.MapUtils
 import com.google.android.gms.maps.*
 import com.google.android.gms.maps.model.*
-import org.json.JSONObject
-
 import com.google.gson.Gson
-
-import com.google.android.gms.maps.CameraUpdateFactory
-
-import com.google.android.gms.maps.model.PolylineOptions
-import com.google.android.gms.maps.model.LatLng
-
-import android.view.animation.AccelerateDecelerateInterpolator
-
-import com.google.android.gms.maps.model.Marker
 import com.google.maps.DirectionsApiRequest
 import com.google.maps.GeoApiContext
 import com.google.maps.PendingResult
-import com.google.maps.model.DirectionsResult
-import android.R
-
-import com.google.android.gms.maps.model.Polyline
-
 import com.google.maps.internal.PolylineEncoding
-
-import com.google.maps.model.DirectionsRoute
-
-import android.os.Looper
-
-
-
-
+import com.google.maps.model.DirectionsResult
+import org.json.JSONArray
+import org.json.JSONObject
+import java.lang.Exception
+import java.util.*
+import kotlin.collections.ArrayList
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
 
@@ -58,13 +43,21 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
     private var mLocationListener: MyLocationListener? = null
     private val TAG = "MapsActivity"
     private lateinit var marker: Marker
+    private var timer: Timer? = null
     private var isMarkerRotating = false
     private var toRotate: Double = 0.0
-    private var destinationLatLng: LatLng? =null
+    private var destinationLatLng: LatLng? = null
     private lateinit var polylineOptions: PolylineOptions
     private var otherUserSocketId: String? = null
     private var otherUSerMarker: Marker? = null
     private var mGeoApiContext: GeoApiContext? = null
+    private var previousLatLngFromServer: LatLng? = null
+    private var currentLatLngFromServer: LatLng? = null
+    private var otherPreviousLatLngFromServer: LatLng? = null
+    private var otherCurrentLatLngFromServer: LatLng? = null
+    private var tripPath = arrayListOf<com.google.maps.model.LatLng>()
+    private var timerTask: TimerTask? = null
+    private val mainThread = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,26 +73,29 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
 
         mLocationListener = MyLocationListener()
         mLocationListener!!.getLocationService(this) { lat, lng, location ->
-            Log.e(TAG,"Activity Lat: $lat Lng: $lng")
-            if(destinationLatLng!=null){
+            Log.e(TAG, "Activity Lat: $lat Lng: $lng")
+            if (destinationLatLng != null) {
                 runOnUiThread {
-                    updateUersLocation(lat, lng, location.bearing, marker)
-                    mMap.animateCamera(CameraUpdateFactory.newLatLng(LatLng(lat,lng)))
+                    //updateUersLocation(lat, lng, location.bearing, marker)
+                    //mMap.animateCamera(CameraUpdateFactory.newLatLng(LatLng(lat,lng)))
+                    //updateCabLocation(LatLng(lat, lng))
                 }
-                if (otherUserSocketId!=null){
-                    val locationData = LocationData(lat.toString(),
+                /*if (otherUserSocketId != null) {
+                    val locationData = LocationData(
+                        lat.toString(),
                         lng.toString(),
                         location.bearing,
-                        otherUserSocketId!!)
+                        otherUserSocketId!!
+                    )
                     SocketDemo.sendLocation(convertObjToJsonObj(locationData))
-                }
+                }*/
             }
         }
     }
 
-    fun updateUersLocation(lat: Double,lng: Double,bearing: Float,mMarker: Marker){
+    fun updateUersLocation(lat: Double, lng: Double, bearing: Float, mMarker: Marker) {
         val currentLocation = LatLng(lat, lng)
-        animateMarker(mMarker,currentLocation,false,bearing)
+        animateMarker(mMarker, currentLocation, false, bearing)
     }
 
     /**
@@ -122,22 +118,28 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
 
         // Add a marker in Sydney and move the camera
         val sydney = LatLng(31.4844536, 74.3928821)
-        val userData = UserData(SocketDemo.getSocketId(),"Robot ${SocketDemo.getSocketId()}",31.4844536,74.3928821)
+        val userData = UserData(
+            SocketDemo.getSocketId(),
+            "Robot ${SocketDemo.getSocketId()}",
+            31.4844536,
+            74.3928821
+        )
         SocketDemo.sendConnectionRequest(convertObjToJsonObj(userData))
-        marker = mMap.addMarker(MarkerOptions().position(sydney).title("Marker in Sydney"))
-        marker.setIcon(bitmapDescriptorFromVector(this,com.example.socketdemo.R.drawable.ic_car))
-        marker.isFlat = true
+        /*marker = mMap.addMarker(MarkerOptions().position(sydney).title("Marker in Sydney"))
+        marker.setIcon(bitmapDescriptorFromVector(this, com.example.socketdemo.R.drawable.ic_car))
+        marker.isFlat = true*/
+        marker = addCarMarkerAndGet(sydney)
         myLocation()
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(sydney,17f))
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(sydney, DEFAULT_ZOOM))
         mMap.setOnMapClickListener {
-            if(destinationLatLng ==null){
+            if (destinationLatLng == null) {
                 destinationLatLng = it
                 calculateDirections()
             }
         }
     }
 
-    fun myLocation(){
+    fun myLocation() {
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -155,10 +157,10 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
             // for ActivityCompat#requestPermissions for more details.
             return
         }
-        mMap.isMyLocationEnabled = true
+        //mMap.isMyLocationEnabled = true
     }
 
-    fun convertObjToJsonObj(any: Any): JSONObject{
+    fun convertObjToJsonObj(any: Any): JSONObject {
         val jsonInString = Gson().toJson(any)
         return JSONObject(jsonInString)
     }
@@ -238,7 +240,14 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
             MarkerOptions()
                 .position(LatLng(latitude, longitude))
                 .anchor(0.5f, 0.5f)
-                .icon(bitmapDescriptorFromVector(this,com.example.socketdemo.R.drawable.ic_car))
+                .icon(bitmapDescriptorFromVector(this, com.example.socketdemo.R.drawable.ic_car))
+        )
+    }
+
+    private fun addCarMarkerAndGet(latLng: LatLng): Marker {
+        return mMap.addMarker(
+            MarkerOptions().position(latLng).flat(true)
+                .icon(BitmapDescriptorFactory.fromBitmap(MapUtils.getCarBitmap(this)))
         )
     }
 
@@ -252,18 +261,103 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
             MarkerOptions()
                 .position(LatLng(latitude, longitude))
                 .title(title)
-                .icon(bitmapDescriptorFromVector(this,com.example.socketdemo.R.drawable.ic_minutes))
+                .icon(
+                    bitmapDescriptorFromVector(
+                        this,
+                        com.example.socketdemo.R.drawable.ic_minutes
+                    )
+                )
                 .anchor(0.5f, 0.5f)
         ).showInfoWindow()
     }
 
-    override fun addUser(username: String, socketId: String,latLng: LatLng) {
+    override fun addUser(username: String, socketId: String, latLng: LatLng) {
 
         runOnUiThread {
-            otherUSerMarker = createMarker(latLng.latitude, latLng.longitude)
+            otherUSerMarker = addCarMarkerAndGet(LatLng(latLng.latitude, latLng.longitude))
         }
         otherUserSocketId = socketId
 
+    }
+
+    fun updateCabLocation(latLng: LatLng,myMarker: Marker) {
+        //if (myMarker == null)
+            //myMarker = addCarMarkerAndGet(LatLng(latLng.latitude, latLng.longitude))
+        if (previousLatLngFromServer == null) {
+            currentLatLngFromServer = latLng
+            previousLatLngFromServer = currentLatLngFromServer
+            myMarker.position = currentLatLngFromServer
+            myMarker.setAnchor(0.5f, 0.5f)
+            animateCamera(currentLatLngFromServer)
+        } else {
+            previousLatLngFromServer = currentLatLngFromServer
+            currentLatLngFromServer = latLng
+            val valueAnimator = AnimationUtils.cabAnimator()
+            valueAnimator.addUpdateListener {
+                if (currentLatLngFromServer != null && previousLatLngFromServer != null
+                ) {
+                    val multiplier = it.animatedFraction
+                    val nextLocation = LatLng(
+                        multiplier * currentLatLngFromServer!!.latitude + (1 - multiplier) * previousLatLngFromServer!!.latitude,
+                        multiplier * currentLatLngFromServer!!.longitude + (1 - multiplier) * previousLatLngFromServer!!.longitude
+                    )
+                    myMarker.position = nextLocation
+                    val rotation =
+                        MapUtils.getRotation(previousLatLngFromServer!!, currentLatLngFromServer!!)
+                    if (!rotation.isNaN()) {
+                        myMarker.rotation = rotation
+                    }
+                    myMarker.setAnchor(0.5f, 0.5f)
+                    animateCamera(nextLocation)
+                }
+            }
+            valueAnimator.start()
+        }
+    }
+
+    fun otherUpdateCabLocation(latLng: LatLng,myMarker: Marker) {
+        //if (myMarker == null)
+        //myMarker = addCarMarkerAndGet(LatLng(latLng.latitude, latLng.longitude))
+        if (otherPreviousLatLngFromServer == null) {
+            otherCurrentLatLngFromServer = latLng
+            otherPreviousLatLngFromServer = otherCurrentLatLngFromServer
+            myMarker.position = otherCurrentLatLngFromServer
+            myMarker.setAnchor(0.5f, 0.5f)
+            animateCamera(otherCurrentLatLngFromServer)
+        } else {
+            otherPreviousLatLngFromServer = otherCurrentLatLngFromServer
+            otherCurrentLatLngFromServer = latLng
+            val valueAnimator = AnimationUtils.cabAnimator()
+            valueAnimator.addUpdateListener {
+                if (otherCurrentLatLngFromServer != null && otherPreviousLatLngFromServer != null
+                ) {
+                    val multiplier = it.animatedFraction
+                    val nextLocation = LatLng(
+                        multiplier * otherCurrentLatLngFromServer!!.latitude + (1 - multiplier) * otherPreviousLatLngFromServer!!.latitude,
+                        multiplier * otherCurrentLatLngFromServer!!.longitude + (1 - multiplier) * otherPreviousLatLngFromServer!!.longitude
+                    )
+                    myMarker.position = nextLocation
+                    val rotation =
+                        MapUtils.getRotation(otherPreviousLatLngFromServer!!, otherCurrentLatLngFromServer!!)
+                    if (!rotation.isNaN()) {
+                        myMarker.rotation = rotation
+                    }
+                    myMarker.setAnchor(0.5f, 0.5f)
+                    animateCamera(nextLocation)
+                }
+            }
+            valueAnimator.start()
+        }
+    }
+
+    private fun animateCamera(latLng: LatLng?) {
+        mMap.animateCamera(
+            CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder().target(
+                    latLng
+                ).zoom(15.5f).build()
+            )
+        )
     }
 
     private fun calculateDirections() {
@@ -298,6 +392,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
                         TAG,
                         "onResult: geocodedWayPoints: " + result.geocodedWaypoints[0].toString()
                     )
+                    for (route in result.routes) {
+                        val path1 = route.overviewPolyline.decodePath()
+                        tripPath.addAll(path1)
+                    }
+                    startTimerForTrip()
                     addPolylinesToMap(result);
                 }
 
@@ -318,14 +417,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
                 Log.d(TAG, "run: distance: " + route.legs[0].distance)
                 Log.d(TAG, "run: duration: " + route.legs[0].duration)
 
-                var totalDist = route.legs[0].distance.inMeters / 1000
-
-                val tempLatLng = midPoint(route.legs[0].startLocation.lat,
-                    route.legs[0].startLocation.lng,
-                    route.legs[0].endLocation.lat,
-                    route.legs[0].endLocation.lng)
-              /*  createMarker(tempLatLng.latitude,
-                    tempLatLng.longitude)*/
                 val decodedPath = PolylineEncoding.decode(route.overviewPolyline.encodedPath)
                 val newDecodedPath: MutableList<LatLng> =
                     ArrayList()
@@ -343,21 +434,24 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
                 }
                 val polyline: Polyline =
                     mMap.addPolyline(PolylineOptions().addAll(newDecodedPath))
-                polyline.color = ContextCompat.getColor(this, com.example.socketdemo.R.color.direction)
+                polyline.color =
+                    ContextCompat.getColor(this, com.example.socketdemo.R.color.black)
                 polyline.isClickable = true
-                polyline.width = 15f
+                polyline.width = 5f
 
                 val midPoint = polyline.points.size / 2
                 val gg = polyline.points.get(midPoint)
-                createMarkerGeneral(gg.latitude,
+                createMarkerGeneral(
+                    gg.latitude,
                     gg.longitude,
                     route.legs[0].duration.toString(),
-                    "")
+                    ""
+                )
             }
         }
     }
 
-    fun midPoint(lat1: Double, lon1: Double, lat2: Double, lon2: Double) : LatLng {
+    fun midPoint(lat1: Double, lon1: Double, lat2: Double, lon2: Double): LatLng {
         var lat1 = lat1
         var lon1 = lon1
         var lat2 = lat2
@@ -377,15 +471,85 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, AddUser {
 
         //print out in degrees
         println(Math.toDegrees(lat3).toString() + " " + Math.toDegrees(lon3))
-        return LatLng(lat3,lon3)
+        return LatLng(lat3, lon3)
     }
 
-    override fun onLocationReceived(latLng: LatLng, socketId: String,bearing: Float) {
+    override fun onLocationReceived(latLng: LatLng, socketId: String, bearing: Float) {
 
         runOnUiThread {
-            updateUersLocation(latLng.latitude,latLng.longitude, bearing, otherUSerMarker!!)
+            otherUpdateCabLocation(LatLng(latLng.latitude, latLng.longitude),otherUSerMarker!!)
         }
 
+    }
+
+    fun startTimerForTrip() {
+        val delay = 5000L
+        val period = 3000L
+        val size = tripPath.size
+        var index = 0
+        timer = Timer()
+        timerTask = object : TimerTask() {
+            override fun run() {
+
+                if (index == 0) {
+                    val jsonObjectTripStart = JSONObject()
+                    jsonObjectTripStart.put("type", "tripStart")
+                    /*mainThread.post {
+                        webSocketListener.onMessage(jsonObjectTripStart.toString())
+                    }*/
+
+                    val jsonObject = JSONObject()
+                    jsonObject.put("type", "tripPath")
+                    val jsonArray = JSONArray()
+                    for (trip in tripPath) {
+                        val jsonObjectLatLng = JSONObject()
+                        jsonObjectLatLng.put("lat", trip.lat)
+                        jsonObjectLatLng.put("lng", trip.lng)
+                        jsonArray.put(jsonObjectLatLng)
+                    }
+                    jsonObject.put("path", jsonArray)
+                    /*mainThread.post {
+                        webSocketListener.onMessage(jsonObject.toString())
+                    }*/
+                }
+
+                val jsonObject = JSONObject()
+                jsonObject.put("type", "location")
+                jsonObject.put("lat", tripPath[index].lat)
+                jsonObject.put("lng", tripPath[index].lng)
+                /*mainThread.post {
+                    webSocketListener.onMessage(jsonObject.toString())
+                }*/
+
+                if (index == size - 1) {
+                    stopTimer()
+                    //startTimerForTripEndEvent(webSocketListener)
+                }else{
+                    runOnUiThread{
+                        updateCabLocation(LatLng(tripPath[index].lat,tripPath[index].lng),marker)
+                    }
+                    if (otherUserSocketId != null) {
+                        val locationData = LocationData(
+                            tripPath[index].lat.toString(),
+                            tripPath[index].lng.toString(),
+                            0.0f,
+                            otherUserSocketId!!
+                        )
+                        SocketDemo.sendLocation(convertObjToJsonObj(locationData))
+                    }
+                }
+
+                index++
+            }
+        }
+        timer?.schedule(timerTask, delay, period)
+    }
+
+    fun stopTimer() {
+        if (timer != null) {
+            timer?.cancel()
+            timer = null
+        }
     }
 
     override fun removeMarker() {

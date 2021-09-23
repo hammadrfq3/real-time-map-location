@@ -14,6 +14,10 @@ import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 
 class MyLocationListener : LocationListener {
@@ -31,7 +35,7 @@ class MyLocationListener : LocationListener {
 
             myCallBack = callback
             locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager?
-            locationManager!!.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, this)
+            locationManager!!.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 0f, this)
 
         }
     }
@@ -42,6 +46,10 @@ class MyLocationListener : LocationListener {
             "Location",
            "Latitude:" + loc.latitude + ", Longitude:" + loc.longitude
         )*/
+       /* CoroutineScope(Main).launch {
+            delay(5000)
+            myCallBack.invoke(loc.latitude,loc.longitude,loc)
+        }*/
         myCallBack.invoke(loc.latitude,loc.longitude,loc)
     }
 

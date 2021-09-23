@@ -81,7 +81,7 @@ object SocketDemo {
     }
 
     private val onConnectError = Emitter.Listener {
-        Log.e(TAG,"Error on connection")
+        Log.e(TAG,"Connection error: ${it[0]}")
     }
 
     private val onMessageReceived = Emitter.Listener { args ->
@@ -113,7 +113,7 @@ object SocketDemo {
             userName = data.getString("userName")
             otherUserSocketID = data.getString("id")
             addUser.addUser(userName,otherUserSocketID,LatLng(lat.toDouble(),lng.toDouble()))
-            Log.d(TAG,"Username: ${userName} SocketID: $otherUserSocketID")
+            Log.d(TAG,"Username: $userName SocketID: $otherUserSocketID")
         } catch (e: JSONException) {
             Log.e(TAG, e.message!!)
         }
